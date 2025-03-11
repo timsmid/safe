@@ -400,3 +400,30 @@ function fgetcsv($stream, ?int $length = null, string $separator = ",", string $
     }
     return $safeResult;
 }
+
+/**
+ * Gets a line from file pointer.
+ *
+ * @param resource $handle The file pointer must be valid, and must point to
+ * a file successfully opened by fopen or
+ * fsockopen (and not yet closed by
+ * fclose).
+ * @param 0|positive-int $length Reading ends when length - 1 bytes have been
+ * read, or a newline (which is included in the return value), or an EOF
+ * (whichever comes first). If no length is specified, it will keep
+ * reading from the stream until it reaches the end of the line.
+ * @return string|false Returns a string of up to length - 1 bytes read from
+ * the file pointed to by handle. If there is no more data
+ * to read in the file pointer, then FALSE is returned.
+ * @throws FilesystemException
+ *
+ */
+function fgets($handle, ?int $length = null): string|false
+{
+    error_clear_last();
+    $safeResult = \fgets($handle, $length);
+    if ($safeResult === false && \feof($handle) === false) {
+        throw FilesystemException::createFromPhpError();
+    }
+    return $safeResult;
+}
