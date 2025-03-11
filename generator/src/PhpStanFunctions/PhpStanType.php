@@ -55,10 +55,6 @@ class PhpStanType
             if (!str_contains($returnType, 'callable')) {
                 $returnType = \str_replace(['(', ')'], '', $returnType);
             }
-
-            if (str_contains($returnType, '__stringAndStringable')) {
-                $returnType = 'string';
-            }
         }
         if ($anyNullable) {
             $returnTypes[] = 'null';
