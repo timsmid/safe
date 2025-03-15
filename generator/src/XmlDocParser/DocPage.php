@@ -111,22 +111,29 @@ class DocPage
      */
     public function loadAndResolveFile(): \SimpleXMLElement
     {
+	    // Retrieve XML of the function.
         $content = \file_get_contents($this->path);
         if ($content === false) {
             throw new \RuntimeException('An error occurred while reading '.$this->path);
-        }
-        $strpos = \strpos($content, '?>')+2;
-        if (!\file_exists(DocPage::findDocDir() . '/entities/generated.ent')) {
+	}
+
+	// Ensure entities are generated.
+        $entitiesPath = \realpath(DocPage::findDocDir() . '/entities/generated.ent');
+        if (!\file_exists($entitiesPath)) {
             self::buildEntities();
         }
-        $path = \realpath(DocPage::findDocDir() . '/entities/generated.ent');
 
-
+	// Add entities to the XML.
+        $strpos = \strpos($content, '?>')+2;
         $content = \substr($content, 0, $strpos)
-            .'<!DOCTYPE refentry SYSTEM "'.$path.'">'
-            .\substr($content, $strpos+1);
+            .'<!DOCTYPE refentry SYSTEM "'.$entitiesPath.'">'
+	    .\substr($content, $strpos+1);
 
-        $elem = \simplexml_load_string($content, \SimpleXMLElement::class, LIBXML_DTDLOAD | LIBXML_NOENT);
+	// Parse includes in the content.
+	$content = $this->resolveIncludes($content, $entitiesPath);
+
+	// Parse XML.
+	$elem = \simplexml_load_string($content, \SimpleXMLElement::class, LIBXML_DTDLOAD | LIBXML_NOENT);
         if ($elem === false) {
             throw new \RuntimeException('Invalid XML file for '.$this->path);
         }
@@ -134,6 +141,57 @@ class DocPage
 
         return $elem;
     }
+
+    /**
+     * Parses the 'xi:include' tags in the provided content.
+     */
+	private function resolveIncludes(string $content, string $entitiesPath): string
+	{
+
+	// Search for includes in the content.
+	$foundIncludes = \preg_match_all('/(?<xinclude><xi:include xpointer="xmlns\((?<xmlnsAlias>.*?)=(?<xmlns>.*?)\) xpointer\((?<xpath>id\(\'function\.(?<function>.*?)\'\).*?)\)">.*?<\/xi:include>)/s', $content, $matches);
+	if ($foundIncludes === false) {
+		throw new \RuntimeException('Failed to find include for ' . $this->path);
+	}
+
+	for ($i = 0; $i < count($matches[0]); $i++) {
+		// Determine module of the included function.
+		$subfilename = \str_replace('_', '-', $matches['function'][$i]);
+		$subpaths = glob(DocPage::findDocDir() . '/doc-en/en/reference/*/functions/' . $subfilename . '.xml');
+		if (count($subpaths) !== 1) continue;
+
+		// Retrieve XML of the included function.	
+		$subcontent = \file_get_contents($subpaths[0]);
+
+		// Add entities to the XML.
+		$substrpos = \strpos($subcontent, '?>') + 2;
+		$subcontent = \substr($subcontent, 0, $substrpos)
+			. '<!DOCTYPE refentry SYSTEM "' . $entitiesPath . '">'
+			. \substr($subcontent, $substrpos + 1);
+
+		// Parse XML.
+		$subelem = \simplexml_load_string($subcontent, \SimpleXMLElement::class, LIBXML_DTDLOAD | LIBXML_NOENT);
+		if ($subelem === false) {
+			throw new \RuntimeException('Invalid XML file for ' . $matches['xinclude'][$i] . ' in ' . $this->path);
+		}
+
+		// Find included content based on xpath.
+		$subelem->registerXpathNamespace($matches['xmlnsAlias'][$i], $matches['xmlns'][$i]);
+		
+		$subvalues = $subelem->xpath($matches['xpath'][$i]);
+		if (is_null($subvalues) || $subvalues === false) {
+			throw new \RuntimeException('Failed to parse path for ' . $matches['xinclude'][$i] . ' in ' . $this->path);
+		}
+
+		if (count($subvalues) !== 1) continue;
+
+		// Replace include tag with found content.
+		$replacement = $subvalues[0]->asXML();
+		$content = str_replace($matches['xinclude'][$i], $replacement, $content);
+	}
+
+	return $content;
+	}
 
     /**
      * Returns the module name in Camelcase.

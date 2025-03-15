@@ -38,7 +38,7 @@ class Method
 
     public function __toString(): string
     {
-        $data = $this->getFunctionName() . "\n";
+	    $data = $this->getFunctionName() . "\n";
         $data .= "\n";
         $data .= "Parameters:\n";
         $n = 0;
@@ -62,7 +62,10 @@ class Method
         $phpDocType = new PhpStanType($this->functionObject->type);
         $data .= "  PHPStan: " . ($phpStanType ? $phpStanType->getDocBlockType() : "(unknown)") . "\n";
         $data .= "  PHPDoc:  " . $phpDocType->getDocBlockType() . "\n";
-        $data .= "  Safe:    " . $this->returnType->getDocBlockType($this->errorType) . "\n";
+	$data .= "  Safe:    " . $this->returnType->getDocBlockType($this->errorType) . "\n";
+	$data .= "\n";
+	$data .= "Doc block:\n";
+	$data .= $this->getDocBlock();
         return $data;
     }
 
@@ -86,7 +89,7 @@ class Method
      */
     public function getParams(): array
     {
-        if ($this->params === null) {
+    if ($this->params === null) {
             if (!isset($this->functionObject->methodparam)) {
                 return [];
             }

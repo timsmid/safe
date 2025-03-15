@@ -10,7 +10,7 @@ use Safe\Exceptions\FilterException;
  *
  * @param int $type
  * @param array|int $options
- * @param bool $add_empty
+ * @param bool $add_empty Add missing keys as NULL to the return value.
  * @return array|null
  * @throws FilterException
  *
