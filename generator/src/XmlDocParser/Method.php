@@ -63,6 +63,9 @@ class Method
         $data .= "  PHPStan: " . ($phpStanType ? $phpStanType->getDocBlockType() : "(unknown)") . "\n";
         $data .= "  PHPDoc:  " . $phpDocType->getDocBlockType() . "\n";
         $data .= "  Safe:    " . $this->returnType->getDocBlockType($this->errorType) . "\n";
+        $data .= "\n";
+        $data .= "Doc block:\n";
+        $data .= $this->getDocBlock();
         return $data;
     }
 

@@ -111,26 +111,79 @@ class DocPage
      */
     public function loadAndResolveFile(): \SimpleXMLElement
     {
-        $content = \file_get_contents($this->path);
-        if ($content === false) {
-            throw new \RuntimeException('An error occurred while reading '.$this->path);
-        }
-        $strpos = \strpos($content, '?>')+2;
-        if (!\file_exists(DocPage::findDocDir() . '/entities/generated.ent')) {
+        // Prepare generated entities.
+        $entitiesPath = \realpath(DocPage::findDocDir() . '/entities/generated.ent');
+        $entities = '<!DOCTYPE refentry SYSTEM "' . $entitiesPath . '">';
+
+        if (!\file_exists($entitiesPath)) {
             self::buildEntities();
         }
-        $path = \realpath(DocPage::findDocDir() . '/entities/generated.ent');
 
+        // Preprocess file before loading it as XML.
+        $pathsToProcess = [\realpath($this->path)];
 
-        $content = \substr($content, 0, $strpos)
-            .'<!DOCTYPE refentry SYSTEM "'.$path.'">'
-            .\substr($content, $strpos+1);
+        for ($i = 0; $i < count($pathsToProcess); $i++) {
+            // Read file contents.
+            $content = \file_get_contents($pathsToProcess[$i]);
+            if ($content === false) {
+                throw new \Exception('Failed to read ' . $pathsToProcess[$i] . ' during processing of ' . $this->path);
+            }
 
-        $elem = \simplexml_load_string($content, \SimpleXMLElement::class, LIBXML_DTDLOAD | LIBXML_NOENT);
+            // If file has already been processed, skip it.
+            if (strpos($content, $entities) !== false) {
+                continue;
+            }
+
+            // Prepend file with generated entities.
+            $strpos = \strpos($content, '?>') + 2;
+            $content = \substr($content, 0, $strpos) . $entities . \substr($content, $strpos + 1);
+
+            // Gather includes.
+            $includeCheck = \preg_match_all('/<xi:include.*?id\(\'(?<id>.*?)\'\).*?>/', $content, $includeMatches);
+            if ($includeCheck === false) {
+                throw new \RuntimeException('Failed to determine includes in ' . $pathsToProcess[$i] . ' during processing of ' . $this->path);
+            }
+
+            // Determine and append href to includes.
+            $includedIds = array_unique($includeMatches['id']);
+
+            foreach ($includedIds as $includedId) {
+                // Determine location of include.
+                $escapedId = \escapeshellarg('xml:id="' . $includedId . '"');
+                $escapedDocDir = \escapeshellarg(\realpath(DocPage::findDocDir()));
+                $execCheck = \exec('grep -lr ' . $escapedId . ' ' . $escapedDocDir, $output);
+
+                if ($execCheck === false || \count($output) !== 1) {
+                    throw new \Exception('Failed to find ID ' . $includedId . ' during processing of ' . $this->path);
+                }
+
+                // Append href to include.
+                $content = \preg_replace(
+                    '/<xi:include(?=.*?id\(\'' . \preg_quote($includedId) . '\'\))/',
+                    '<xi:include href="' . $output[0] . '" ',
+                    $content
+                );
+
+                // Queue included file for processing.
+                if (!in_array($output[0], $pathsToProcess)) {
+                    $pathsToProcess[] = $output[0];
+                }
+            }
+
+            // Update file contents.
+            \file_put_contents($pathsToProcess[$i], $content);
+        }
+
+        // Parse main file.
+        $elem = \simplexml_load_file($this->path, \SimpleXMLElement::class, LIBXML_DTDLOAD | LIBXML_NOENT);
         if ($elem === false) {
             throw new \RuntimeException('Invalid XML file for '.$this->path);
         }
         $elem->registerXPathNamespace('docbook', 'http://docbook.org/ns/docbook');
+
+        // Parse includes.
+        $dom = dom_import_simplexml($elem);
+        $dom->ownerDocument->xinclude();
 
         return $elem;
     }

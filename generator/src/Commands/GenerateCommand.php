@@ -115,7 +115,7 @@ class GenerateCommand extends Command
             throw new \RuntimeException("Failed to git-clean in $dir (exit $code):\n{$process->getErrorOutput()}");
         }
 
-        $process = new Process(['git', 'checkout', $commit], $dir);
+        $process = new Process(['git', 'checkout', '-f', $commit], $dir);
         $process->setTimeout(10);
         $code = $process->run();
         if ($code !== 0) {
